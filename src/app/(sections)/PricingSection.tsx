@@ -41,9 +41,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useInView } from 'framer-motion';
 import { useRef } from 'react';
 
+type BillingCycle = 'monthly' | 'quarterly' | 'yearly';
+type PlanId = 'starter' | 'growth' | 'enterprise';
+
 const PricingSection = () => {
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
-  const [activePlan, setActivePlan] = useState<string>('growth');
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
+  const [activePlan, setActivePlan] = useState<PlanId>('growth');
   const [customFeatures, setCustomFeatures] = useState<Record<string, boolean>>({});
   const [estimatedBudget, setEstimatedBudget] = useState<number>(50000);
   const [calculatedROI, setCalculatedROI] = useState<number>(0);
@@ -77,7 +80,7 @@ const PricingSection = () => {
 
   const plans = [
     {
-      id: 'starter',
+      id: 'starter' as PlanId,
       name: 'Starter',
       tagline: 'Perfect for startups & small businesses',
       description: 'Essential marketing services to establish your online presence',
@@ -102,7 +105,7 @@ const PricingSection = () => {
       borderColor: 'border-blue-200'
     },
     {
-      id: 'growth',
+      id: 'growth' as PlanId,
       name: 'Growth',
       tagline: 'Most Popular - For scaling businesses',
       description: 'Comprehensive marketing to accelerate your growth',
@@ -128,7 +131,7 @@ const PricingSection = () => {
       popular: true
     },
     {
-      id: 'enterprise',
+      id: 'enterprise' as PlanId,
       name: 'Enterprise',
       tagline: 'Maximum impact for established brands',
       description: 'Full-service marketing with dedicated resources',
@@ -252,7 +255,7 @@ const PricingSection = () => {
 
   // Calculate total price
   const calculateTotal = () => {
-    const basePrice = pricing[billingCycle][activePlan as keyof typeof pricing.monthly];
+    const basePrice = pricing[billingCycle][activePlan];
     const addOnsTotal = Object.keys(customFeatures)
       .filter(key => customFeatures[key])
       .reduce((total, addOnId) => {
@@ -272,9 +275,9 @@ const PricingSection = () => {
 
   // Calculate savings
   const getSavings = () => {
-    const monthlyPrice = pricing.monthly[activePlan as keyof typeof pricing.monthly];
-    const currentPrice = pricing[billingCycle][activePlan as keyof typeof pricing.monthly];
-    
+    const monthlyPrice = pricing.monthly[activePlan];
+    const currentPrice = pricing[billingCycle][activePlan];
+
     if (billingCycle === 'quarterly') {
       return monthlyPrice * 3 - currentPrice;
     }
@@ -284,25 +287,39 @@ const PricingSection = () => {
     return 0;
   };
 
-  // ROI Calculator
+  // ROI Calculator (defensive & typesafe)
   const calculateROI = () => {
-    // Simplified ROI calculation based on industry averages
-    const baseMultiplier = {
+    // mapping for base multipliers (safe lookup)
+    const baseMultiplierMap: Record<PlanId, number> = {
       starter: 2.5,
       growth: 3.2,
       enterprise: 4.0
-    }[activePlan];
+    };
 
-    const addOnMultiplier = Object.keys(customFeatures)
+    // ensure base multiplier exists, fallback to 0
+    const baseMultiplier: number = baseMultiplierMap[activePlan] ?? 0;
+
+    // compute add-ons multiplier (each add-on contributes 0.2 by default)
+    const addOnMultiplier: number = Object.keys(customFeatures)
       .filter(key => customFeatures[key])
-      .reduce((total, addOnId) => total + 0.2, 0);
+      .reduce((total: number) => total + 0.2, 0);
 
-    const totalMultiplier = baseMultiplier + addOnMultiplier;
-    const monthlyInvestment = calculateTotal();
-    const estimatedMonthlyRevenue = monthlyInvestment * totalMultiplier;
-    const roi = ((estimatedMonthlyRevenue - monthlyInvestment) / monthlyInvestment) * 100;
+    const totalMultiplier: number = baseMultiplier + addOnMultiplier;
 
-    setCalculatedROI(Math.round(roi));
+    const monthlyInvestmentRaw = calculateTotal();
+    const monthlyInvestment = Number.isFinite(monthlyInvestmentRaw) ? monthlyInvestmentRaw : 0;
+
+    // guard against divide-by-zero and invalid numbers
+    let roi = 0;
+    if (monthlyInvestment > 0 && Number.isFinite(totalMultiplier) && totalMultiplier >= 0) {
+      const estimatedMonthlyRevenue = monthlyInvestment * totalMultiplier;
+      roi = ((estimatedMonthlyRevenue - monthlyInvestment) / monthlyInvestment) * 100;
+    } else {
+      roi = 0;
+    }
+
+    // set a safe integer value
+    setCalculatedROI(Math.round(Number.isFinite(roi) ? roi : 0));
   };
 
   const handleGetPlanClick = () => {
@@ -318,14 +335,14 @@ const PricingSection = () => {
 
   const handleProceedPayment = () => {
     if (!selectedPaymentMethod) return;
-    
+
     setPaymentProcessing(true);
-    
+
     // Simulate payment processing
     setTimeout(() => {
       setPaymentProcessing(false);
       setPaymentSuccess(true);
-      
+
       // Reset after 3 seconds
       setTimeout(() => {
         setShowPaymentModal(false);
@@ -337,6 +354,7 @@ const PricingSection = () => {
 
   useEffect(() => {
     calculateROI();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePlan, customFeatures, billingCycle]);
 
   const selectedPlan = plans.find(plan => plan.id === activePlan);
@@ -348,7 +366,7 @@ const PricingSection = () => {
       <div className="absolute top-0 left-0 w-96 h-96 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
       <div className="absolute top-0 right-0 w-96 h-96 bg-green-100 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
       <div className="absolute bottom-0 left-1/2 w-96 h-96 bg-purple-100 rounded-full mix-blend-multiply filter blur-3xl opacity-20" />
-      
+
       <div className="container mx-auto px-4 relative z-10">
         {/* Section Header */}
         <motion.div
@@ -362,11 +380,11 @@ const PricingSection = () => {
             <CreditCard className="w-4 h-4" />
             Pricing & Plans
           </div>
-          
+
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
             Transparent Pricing, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-green-600">Exceptional Value</span>
           </h2>
-          
+
           <p className="text-lg md:text-xl text-gray-600">
             Choose the perfect plan for your business. All plans include our performance guarantee.
           </p>
@@ -400,7 +418,7 @@ const PricingSection = () => {
               </button>
             ))}
           </div>
-          
+
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Shield className="w-4 h-4 text-green-500" />
             <span>30-day money-back guarantee on all plans</span>
@@ -717,7 +735,7 @@ const PricingSection = () => {
                     {plans.map(plan => {
                       let value = '';
                       let icon = null;
-                      
+
                       if (feature === 'Dedicated Account Manager') {
                         value = plan.id === 'starter' ? 'Shared' : 'Dedicated';
                         icon = plan.id !== 'starter' ? <Check className="w-5 h-5 text-green-500" /> : null;
@@ -737,7 +755,7 @@ const PricingSection = () => {
                         value = 'Yes';
                         icon = <Shield className="w-5 h-5 text-green-500" />;
                       }
-                      
+
                       return (
                         <td key={`${plan.id}-${feature}`} className="p-4 text-center">
                           <div className="flex items-center justify-center gap-2">
@@ -827,7 +845,7 @@ const PricingSection = () => {
                   Ready to Grow Your Business?
                 </h3>
               </div>
-              
+
               <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
                 Join 150+ satisfied clients who trust MarketingPro with their digital growth. 
                 Get started with a risk-free 30-day trial.
@@ -840,9 +858,6 @@ const PricingSection = () => {
                 >
                   Start Free 30-Day Trial
                 </button>
-                {/* <button className="px-8 py-4 bg-white text-gray-800 rounded-xl font-semibold text-lg border-2 border-gray-200 hover:border-blue-500 hover:shadow-lg transition-all duration-300">
-                  Schedule Free Consultation
-                </button> */}
               </div>
 
               <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-500">
@@ -939,7 +954,7 @@ const PricingSection = () => {
                             </div>
                           </div>
                         </div>
-                        
+
                         {Object.keys(customFeatures).filter(key => customFeatures[key]).length > 0 && (
                           <div className="mt-3 pt-3 border-t border-gray-200">
                             <div className="text-xs text-gray-600 mb-1">Add-ons included:</div>
@@ -956,7 +971,7 @@ const PricingSection = () => {
                       {/* Payment Methods - Compact Grid */}
                       <div className="p-4">
                         <h4 className="text-sm font-semibold text-gray-900 mb-3">Select Payment Method</h4>
-                        
+
                         {/* Compact 2x3 Grid */}
                         <div className="grid grid-cols-3 gap-2 mb-4">
                           {paymentMethods.map((method) => (
